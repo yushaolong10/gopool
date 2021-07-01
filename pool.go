@@ -197,6 +197,7 @@ func (p *Pool) Put(conn *Conn, broken bool) {
 			p.mutex.Unlock()
 			//close old
 			conn.close()
+			conn = nil
 			//must get new conn
 			//or will make other block get dead lock
 			for {
@@ -204,6 +205,11 @@ func (p *Pool) Put(conn *Conn, broken bool) {
 				case <-p.ctx.Done():
 					return
 				default:
+				}
+				//fix: when unavailable, break
+				if !p.available {
+					log("pool(%s) broken get new conn but unavailable now", p.addr)
+					break
 				}
 				newC, err := p.new()
 				if err != nil {
@@ -291,18 +297,18 @@ func (p *Pool) health() bool {
 		if err != nil {
 			log("pool addr(%s) health new err:%s", p.addr, err.Error())
 			p.healthFailedNum++
-			p.mutex.Lock()
-			p.newFailedNum++
-			p.mutex.Unlock()
+			//p.mutex.Lock()
+			//p.newFailedNum++
+			//p.mutex.Unlock()
 			return
 		}
 		err = conn.Ping()
 		if err != nil {
 			log("pool addr(%s) health ping err:%s", p.addr, err.Error())
 			p.healthFailedNum++
-			p.mutex.Lock()
-			p.pingFailedNum++
-			p.mutex.Unlock()
+			//p.mutex.Lock()
+			//p.pingFailedNum++
+			//p.mutex.Unlock()
 			return
 		}
 		p.healthFailedNum = 0
@@ -319,6 +325,17 @@ func (p *Pool) isAvailable() bool {
 
 func (p *Pool) markAvailable(ok bool) {
 	p.available = ok
+	//fix: when unavailable, close block req
+	if !p.available {
+		p.mutex.Lock()
+		if len(p.reqBlocks) > 0 {
+			for id, reqChan := range p.reqBlocks {
+				delete(p.reqBlocks, id)
+				close(reqChan)
+			}
+		}
+		p.mutex.Unlock()
+	}
 }
 
 func (p *Pool) nextReqId() int64 {
