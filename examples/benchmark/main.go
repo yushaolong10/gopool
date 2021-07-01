@@ -16,6 +16,7 @@ var (
 )
 
 func main() {
+	fmt.Println("init benchmark test")
 	connimpl.Init()
 	ctx, cancel := context.WithCancel(context.Background())
 	go monitor(cancel)
@@ -23,6 +24,8 @@ func main() {
 	benchmarkBlock(ctx, &wg)
 	benchmarkTimeout(ctx, &wg)
 	wg.Wait()
+	fmt.Println("begin sleep 30")
+	time.Sleep(time.Second * 30)
 	fmt.Println("begin to closed")
 	connimpl.Close()
 	fmt.Println("closed success. wait 30s to leave...")
