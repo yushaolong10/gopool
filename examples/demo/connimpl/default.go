@@ -64,7 +64,7 @@ func PutConn(conn *GrpcConn, err error) error {
 
 var poolClusterList = make(map[string]*gopool.PoolCluster)
 
-func Init() {
+func Init() error {
 	cfg := gopool.Config{
 		//for connections
 		WriteTimeout: 1000,
