@@ -31,14 +31,19 @@ type Pool struct {
 	maxConnNum int64
 	new        func() (IConn, error)
 
-	requestNum    int64
-	reqFailedNum  int64
-	newFailedNum  int64
-	pingFailedNum int64
+	//total request num and 'return broken' failed num
+	requestNum   int64
+	reqFailedNum int64
+	//call newFunc total num and failed num
+	newReqNum    int64
+	newFailedNum int64
+
 	//health check server nodes available
 	//only use in check, do not need lock
 	healthFailedNum int64
-	// if put a new recently active conn into pool if idle list exceed maxIdle,
+	//ping failed num for health check
+	pingFailedNum int64
+	// if put a new recently active conn into pool when idle list exceed maxIdle,
 	// an older conn will be evicted
 	evictNum int64
 	// currently idle conn numbers
@@ -142,6 +147,7 @@ func (p *Pool) Get(ctx context.Context) (conn *Conn, err error) {
 		}
 	}
 	for i := 0; i < maxTryNew; i++ {
+		p.newReqNum++
 		c, err := p.new()
 		if err != nil {
 			p.newFailedNum++
@@ -208,17 +214,19 @@ func (p *Pool) Put(conn *Conn, broken bool) {
 				}
 				//fix: when unavailable, break
 				if !p.available {
-					log("pool(%s) broken get new conn but unavailable now", p.addr)
+					log("pool(%s) conn broken get new conn but unavailable now", p.addr)
 					break
 				}
 				newC, err := p.new()
+				p.mutex.Lock()
+				p.newReqNum++
 				if err != nil {
-					log("pool(%s) broken must get new conn err:%s", p.addr, err.Error())
-					p.mutex.Lock()
 					p.newFailedNum++
 					p.mutex.Unlock()
+					log("pool(%s) conn broken get new conn err:%s", p.addr, err.Error())
 					continue
 				}
+				p.mutex.Unlock()
 				conn = &Conn{
 					c:    newC,
 					pool: p,
@@ -297,18 +305,13 @@ func (p *Pool) health() bool {
 		if err != nil {
 			log("pool addr(%s) health new err:%s", p.addr, err.Error())
 			p.healthFailedNum++
-			//p.mutex.Lock()
-			//p.newFailedNum++
-			//p.mutex.Unlock()
 			return
 		}
 		err = conn.Ping()
 		if err != nil {
 			log("pool addr(%s) health ping err:%s", p.addr, err.Error())
 			p.healthFailedNum++
-			//p.mutex.Lock()
-			//p.pingFailedNum++
-			//p.mutex.Unlock()
+			p.pingFailedNum++
 			return
 		}
 		p.healthFailedNum = 0
@@ -350,6 +353,7 @@ type Stats struct {
 	MaxConnNum          int64
 	RequestNum          int64
 	ReqFailedNum        int64
+	NewReqNum           int64
 	NewFailedNum        int64
 	PingFailedNum       int64
 	HealthFailedNum     int64
@@ -372,6 +376,7 @@ func (p *Pool) stats() Stats {
 		MaxConnNum:          p.maxConnNum,
 		RequestNum:          p.requestNum,
 		ReqFailedNum:        p.reqFailedNum,
+		NewReqNum:           p.newReqNum,
 		NewFailedNum:        p.newFailedNum,
 		PingFailedNum:       p.pingFailedNum,
 		HealthFailedNum:     p.healthFailedNum,
