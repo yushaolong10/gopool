@@ -66,7 +66,7 @@ type Pool struct {
 //get connection
 //if ctx with timeout, will return ErrConnTimeout when no available conn util the timeout
 //if ctx default, will blocked
-func (p *Pool) Get(ctx context.Context) (conn *Conn, err error) {
+func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 	p.mutex.Lock()
 	if p.closed {
 		p.mutex.Unlock()
@@ -169,7 +169,7 @@ func (p *Pool) Get(ctx context.Context) (conn *Conn, err error) {
 
 //put the connection to pool
 //if broken, the connection will be recycled
-func (p *Pool) Put(conn *Conn, broken bool) {
+func (p *Pool) put(conn *Conn, broken bool) {
 	//avoid many times put
 	conn.mutex.Lock()
 	if !conn.inUse {

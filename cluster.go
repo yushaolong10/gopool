@@ -81,7 +81,7 @@ func (pc *PoolCluster) GetConnBlock() (conn *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.Get(ctx)
+	return p.get(ctx)
 }
 
 //get conn, if timeout, will return ErrConnTimeout
@@ -92,7 +92,7 @@ func (pc *PoolCluster) GetConnTimeout(timeout int64) (conn *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.Get(ctx)
+	return p.get(ctx)
 }
 
 //put conn into the pool
@@ -102,7 +102,7 @@ func (pc *PoolCluster) PutConn(conn *Conn, broken bool) (err error) {
 		conn.close()
 		log("pool cluster put conn, pool is nil")
 	} else {
-		p.Put(conn, broken)
+		p.put(conn, broken)
 	}
 	return nil
 }
