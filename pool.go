@@ -124,7 +124,13 @@ func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 					nextConn := <-reqChan
 					nextChan <- nextConn
 				} else {
-					<-reqChan
+					conn = <-reqChan
+					if conn != nil {
+						conn.close()
+						//when the conn can not be reused
+						//p.activeNum should be minus 1
+						p.activeNum--
+					}
 				}
 			} else {
 				delete(p.reqBlocks, id)
@@ -139,7 +145,6 @@ func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 				p.mutex.Unlock()
 				return nil, ErrConnIsNil
 			}
-			p.activeNum++
 			p.mutex.Unlock()
 			conn.inUse = true
 			close(reqChan)
@@ -185,9 +190,11 @@ func (p *Pool) put(conn *Conn, broken bool) {
 		conn.close()
 		return
 	}
-	//minus active
-	p.activeNum--
 
+	//if p.reqBlocks length greater than 0
+	//p.activeNum do not need to minus 1
+	//because of the p.mutex will unlock early
+	//this will lead all conn num exceed maxConnNum
 	if len(p.reqBlocks) > 0 {
 		var reqChan chan *Conn
 		var id int64
@@ -214,6 +221,11 @@ func (p *Pool) put(conn *Conn, broken bool) {
 				}
 				//fix: when unavailable, break
 				if !p.available {
+					//when the conn can not be reused
+					//p.activeNum should be minus 1
+					p.mutex.Lock()
+					p.activeNum--
+					p.mutex.Unlock()
 					log("pool(%s) conn broken get new conn but unavailable now", p.addr)
 					break
 				}
@@ -241,6 +253,7 @@ func (p *Pool) put(conn *Conn, broken bool) {
 	//then blocked requests maybe deadlock
 	if broken {
 		p.reqFailedNum++
+		p.activeNum--
 		p.mutex.Unlock()
 		conn.close()
 		return
@@ -251,6 +264,7 @@ func (p *Pool) put(conn *Conn, broken bool) {
 		copy(p.idleList, p.idleList[1:])
 		p.idleList = append(p.idleList[:p.idleNum-1], conn)
 		p.evictNum++
+		p.activeNum--
 		p.mutex.Unlock()
 		//close head older conn
 		oldConn.close()
@@ -259,6 +273,7 @@ func (p *Pool) put(conn *Conn, broken bool) {
 	conn.accessTime = time.Now().Unix()
 	p.idleList = append(p.idleList, conn)
 	p.idleNum++
+	p.activeNum--
 	p.mutex.Unlock()
 	return
 }
