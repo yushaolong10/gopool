@@ -131,6 +131,7 @@ func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 						p.mutex.Unlock()
 
 						nextChan <- conn
+						log("pool id(%d) addr(%s) transfer conn to other block request", p.uniqueId, p.addr)
 					} else {
 						if conn != nil {
 							//when the conn can not be reused
@@ -141,6 +142,7 @@ func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 						//close later without mutex
 						if conn != nil {
 							conn.close()
+							log("pool id(%d) addr(%s) conn closed because of block request empty", p.uniqueId, p.addr)
 						}
 					}
 				}
@@ -235,7 +237,7 @@ func (p *Pool) put(conn *Conn, broken bool) {
 					p.mutex.Lock()
 					p.activeNum--
 					p.mutex.Unlock()
-					log("pool(%s) conn broken get new conn but unavailable now", p.addr)
+					log("pool id(%d) addr(%s) conn broken get new conn but unavailable now", p.uniqueId, p.addr)
 					break
 				}
 				newC, err := p.new()
@@ -244,7 +246,7 @@ func (p *Pool) put(conn *Conn, broken bool) {
 				if err != nil {
 					p.newFailedNum++
 					p.mutex.Unlock()
-					log("pool(%s) conn broken get new conn err:%s", p.addr, err.Error())
+					log("pool id(%d) addr(%s) conn broken get new conn err:%s", p.uniqueId, p.addr, err.Error())
 					continue
 				}
 				p.mutex.Unlock()
@@ -320,20 +322,20 @@ func (p *Pool) close() {
 		conn.pool = nil
 		conn.close()
 	}
-	log("pool id(%d) addr(%s) closed success.", p.uniqueId, p.addr)
+	log("pool id(%d) addr(%s) closed success", p.uniqueId, p.addr)
 }
 
 func (p *Pool) health() bool {
 	func() {
 		conn, err := p.new()
 		if err != nil {
-			log("pool addr(%s) health new err:%s", p.addr, err.Error())
+			log("pool id(%d) addr(%s) health new err:%s", p.uniqueId, p.addr, err.Error())
 			p.healthFailedNum++
 			return
 		}
 		err = conn.Ping()
 		if err != nil {
-			log("pool addr(%s) health ping err:%s", p.addr, err.Error())
+			log("pool id(%d) addr(%s) health ping err:%s", p.uniqueId, p.addr, err.Error())
 			p.healthFailedNum++
 			p.pingFailedNum++
 			return

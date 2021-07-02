@@ -122,7 +122,7 @@ func (pc *PoolCluster) Shutdown() {
 	//cancel context
 	pc.cancel()
 	//log
-	log("poolCluster closed success.")
+	log("poolCluster closed success")
 }
 
 //get a available pool
