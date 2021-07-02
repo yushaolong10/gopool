@@ -111,32 +111,41 @@ func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 			p.mutex.Lock()
 			p.waitBlockNum--
 			_, ok := p.reqBlocks[id]
-			if !ok {
-				//it means this chan has been removed with a conn
-				//we need put chan conn proxy to another chan
-				if len(p.reqBlocks) > 0 {
-					var nextChan chan *Conn
-					var nextId int64
-					for nextId, nextChan = range p.reqBlocks {
-						break
-					}
-					delete(p.reqBlocks, nextId)
-					nextConn := <-reqChan
-					nextChan <- nextConn
-				} else {
-					conn = <-reqChan
-					if conn != nil {
-						conn.close()
-						//when the conn can not be reused
-						//p.activeNum should be minus 1
-						p.activeNum--
-					}
-				}
-			} else {
+			if ok {
 				delete(p.reqBlocks, id)
 			}
-			close(reqChan)
 			p.mutex.Unlock()
+			if !ok {
+				select {
+				case conn = <-reqChan:
+					p.mutex.Lock()
+					//it means the chan has been removed with a conn in it,
+					//we need put chan conn to other block req
+					if len(p.reqBlocks) > 0 {
+						var nextChan chan *Conn
+						var nextId int64
+						for nextId, nextChan = range p.reqBlocks {
+							break
+						}
+						delete(p.reqBlocks, nextId)
+						p.mutex.Unlock()
+
+						nextChan <- conn
+					} else {
+						if conn != nil {
+							//when the conn can not be reused
+							//p.activeNum should be minus 1
+							p.activeNum--
+						}
+						p.mutex.Unlock()
+						//close later without mutex
+						if conn != nil {
+							conn.close()
+						}
+					}
+				}
+			}
+			close(reqChan)
 			return nil, ErrConnTimeout
 		case conn = <-reqChan:
 			p.mutex.Lock()
