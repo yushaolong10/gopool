@@ -3,6 +3,7 @@ package gopool
 import (
 	"context"
 	"fmt"
+	"github.com/alwaysthanks/melon"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,8 @@ type Pool struct {
 	closed bool
 	//pool health
 	available bool
+	//melon metric
+	melon *melon.Ring
 }
 
 //get connection
@@ -180,6 +183,8 @@ func (p *Pool) get(ctx context.Context) (conn *Conn, err error) {
 		return conn, nil
 	}
 	p.mutex.Unlock()
+	//set get conn err metric
+	p.melon.Feed(false)
 	return nil, ErrNewConn
 }
 
@@ -192,6 +197,10 @@ func (p *Pool) put(conn *Conn, broken bool) {
 		conn.mutex.Unlock()
 		return
 	}
+
+	//add metric
+	p.melon.Feed(broken)
+
 	conn.inUse = false
 	conn.mutex.Unlock()
 	//pool closed
@@ -343,6 +352,10 @@ func (p *Pool) health() bool {
 		p.healthFailedNum = 0
 	}()
 	if p.healthFailedNum > 3 {
+		return false
+	}
+	//add metric check for ok
+	if !p.melon.OK() {
 		return false
 	}
 	return true

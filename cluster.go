@@ -3,6 +3,7 @@ package gopool
 import (
 	"context"
 	"fmt"
+	"github.com/alwaysthanks/melon"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,7 +32,7 @@ func NewPoolCluster(addrList []string, cfg Config, factory IConnFactory) *PoolCl
 		cancel:   cancel,
 		poolList: make([]*Pool, 0),
 		checkInterval: func() {
-			time.Sleep(time.Second * 3)
+			time.Sleep(time.Second * 2)
 		},
 	}
 	for _, addr := range addrList {
@@ -51,6 +52,7 @@ func NewPoolCluster(addrList []string, cfg Config, factory IConnFactory) *PoolCl
 			idleList:  make([]*Conn, 0, cfg.MaxIdleNum),
 			reqBlocks: make(map[int64]chan *Conn),
 			available: true,
+			melon:     melon.New(5000, melon.OptionAnchor(20, 18), melon.OptionAnchor(100, 70)),
 		}
 		pc.poolList = append(pc.poolList, p)
 	}
